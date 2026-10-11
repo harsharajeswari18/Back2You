@@ -1,0 +1,23 @@
+# docker compose up -d   -> MySQL (schema, procedures, seed auto-loaded) + Qdrant
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # files run in alphabetical order on first start only
+      - ./database/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./database/02_procedures.sql:/docker-entrypoint-initdb.d/02_procedures.sql:ro
+      - ./database/03_seed.sql:/docker-entrypoint-initdb.d/03_seed.sql:ro
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+volumes:
+  mysql_data:
+  qdrant_data:
