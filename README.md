@@ -26,3 +26,18 @@ Demo logins: admin `user1@back2you.test`, staff `user3@back2you.test`, user `use
 | GET | /api/admin/dashboard | admin |
 
 `database/queries_and_tests.sql` holds the report queries, demos and negative tests.
+
+## Vector matching (Qdrant)
+- **What is embedded:** item title + description + category name.
+- **Model:** `all-MiniLM-L6-v2` (384 dimensions) via Transformers.js, run inside Node (downloads ~25 MB on first use).
+- **Storage:** Qdrant collection `found_items`, cosine distance, point id = MySQL `item_id`,
+  payload = category_id, location_id, color, found_ts. Item status stays in MySQL only.
+- **Retrieval:** embed the claimant's description -> Qdrant top-50 by cosine -> keep items that are
+  still open in MySQL -> re-rank: 0.65 cosine + 0.12 category + 0.10 location + 0.08 colour + 0.05 time.
+
+### Run it
+1. Start Qdrant: `docker compose up -d qdrant`  (or use a free Qdrant Cloud cluster: set `QDRANT_URL` and `QDRANT_API_KEY` in `.env`)
+2. `npm install`
+3. `npm run index-items`   (embeds all items into Qdrant; re-run any time)
+4. `npm run eval-match`    (top-1 / top-3 / top-5 / MRR, vector-only vs hybrid)
+5. `POST /api/match` with `{"description": "...", "category_id": 2, "color": "blue", "lost_at": "2026-10-10 08:00:00"}`

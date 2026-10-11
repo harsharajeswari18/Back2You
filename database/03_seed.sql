@@ -3,8 +3,8 @@
 --
 -- Ground truth for match-quality testing:
 --   claims on items 1..150 point at the item they truly describe (claims.item_id),
---   so each of those claims is a lost/found pair. Reword some of the claim texts
---   by hand (different words than the item text) for a more honest accuracy number.
+--   so each of those claims is a lost/found pair. The claim text is a templated
+--   paraphrase of the item text; reword 30-40 of them by hand for a more honest number.
 USE back2you;
 SET @app_user_id = 3;          -- audit rows get a changed_by
 
@@ -43,6 +43,8 @@ INSERT INTO locations (name, type, city) VALUES
  ('Phoenix Mall','public','Bengaluru'),('Koramangala Cafe','public','Bengaluru');
 
 -- ---------------- 300 found items (triggers add custody + audit rows) -------
+-- Each item gets a color, a type, a feature AND a distinguishing mark, so that
+-- no two items have the same description (needed for honest match-accuracy tests).
 INSERT INTO items (finder_id, category_id, location_id, title, description,
                    color, found_at, current_custodian_id)
 WITH RECURSIVE seq (n) AS (
@@ -58,13 +60,15 @@ base AS (
         'steel water bottle') AS noun,
     ELT(1 + (n DIV 10) % 6, 'with a small scratch','with a sticker on it',
         'with a blue keychain attached','inside a black pouch',
-        'with initials engraved','that looks slightly worn') AS feat
+        'with initials engraved','that looks slightly worn') AS feat,
+    ELT(1 + (n DIV 60) % 5, 'the letters AK written on it','a red ribbon tied to it',
+        'a torn corner','a smiley sticker on it','a gold clasp') AS mark
   FROM seq
 )
 SELECT 11 + n % 50, cat, loc,
        CONCAT(color, ' ', noun),
-       CONCAT('Found a ', color, ' ', noun, ' ', feat, ' near ',
-              (SELECT name FROM locations WHERE location_id = loc), '.'),
+       CONCAT('Found a ', color, ' ', noun, ' ', feat, '. It also has ', mark,
+              '. Found near ', (SELECT name FROM locations WHERE location_id = loc), '.'),
        color,
        NOW() - INTERVAL (n % 60) DAY - INTERVAL ((n * 37) % 1440) MINUTE,
        3 + n % 8
@@ -77,11 +81,18 @@ SELECT i.item_id, i.title, i.found_at, i.location_id, l.name AS loc_name
 FROM items i JOIN locations l ON l.location_id = i.location_id;
 
 -- ---------------- claims on items 1..150 (true owner of each item) ----------
+-- The claim describes the SAME item in different words (paraphrased).
 INSERT INTO claims (item_id, claimant_id, description, lost_at, lost_location_id)
 SELECT s.item_id, 11 + (s.item_id + 17) % 50,
-       CONCAT('I lost my ', s.title, ' around ', s.loc_name, '. ',
-              ELT(1 + s.item_id % 4, 'It is a bit worn.', 'It has a few stickers on it.',
-                  'I kept it in a small pouch.', 'There are my initials on it.')),
+       CONCAT('I lost my ', s.title, ' ',
+              ELT(1 + (s.item_id DIV 10) % 6, 'with a tiny scratch on it',
+                  'that has a sticker stuck on', 'with a blue keychain hanging from it',
+                  'which was kept in a black pouch', 'with my initials engraved',
+                  'which is a bit old and worn'),
+              '. It had ',
+              ELT(1 + (s.item_id DIV 60) % 5, 'AK written on it', 'a red ribbon on it',
+                  'one corner torn', 'a smiley face sticker', 'a golden clasp'),
+              '. I last had it around ', s.loc_name, '.'),
        s.found_at - INTERVAL 5 HOUR, s.location_id
 FROM seed_items s WHERE s.item_id <= 150;
 

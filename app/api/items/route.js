@@ -1,6 +1,7 @@
 import { pool, withUser } from '@/lib/db';
 import { requireRole } from '@/lib/auth';
 import { route, ok, HttpError } from '@/lib/http';
+import { indexItems } from '@/lib/vector.mjs';
 
 // GET /api/items?q=black wallet&status=registered&category_id=2&location_id=8
 export const GET = route(async (req) => {
@@ -38,5 +39,15 @@ export const POST = route(async (req) => {
     const [[row]] = await conn.query('SELECT @item AS id');
     return row.id;
   });
+  try {   // add the new item to the vector index; failure must not break registration
+    const [[it]] = await pool.query(
+      `SELECT i.item_id, i.title, i.description, i.color, i.category_id, i.location_id,
+              UNIX_TIMESTAMP(i.found_at) AS found_ts, c.name AS category
+         FROM items i JOIN categories c ON c.category_id = i.category_id WHERE i.item_id = ?`, [id]);
+    await indexItems([it]);
+    await pool.query('UPDATE items SET vector_id = ? WHERE item_id = ?', [String(id), id]);
+  } catch (e) {
+    console.error('vector index failed (run npm run index-items later):', e.message);
+  }
   return ok({ item_id: id }, 201);
 });
